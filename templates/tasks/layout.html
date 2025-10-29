@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>{% block title %}Task List{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'tasks/style.css' %}">
+    <link rel="manifest" href="{% static 'tasks/manifest.json' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="user-info">
+            {% if request.user.is_authenticated %}
+                <span>{{ request.user.username }}</span>
+                <form action="{% url 'users:logout' %}" method="post">
+                    {% csrf_token %}
+                    <button type="submit">Logout</button>
+                </form>
+            {% endif %}
+        </div>
+    </header>
+    {% if messages %}
+        <ul class="messages">
+        {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Register the service worker for the PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register("/static/service-worker.js")
+            .then(function(registration) {
+                console.log('Service Worker registered with scope:', registration.scope);
+
+                // Wait until the service worker is ready before sending messages
+                navigator.serviceWorker.ready.then(function(reg) {
+                    if (reg.active) {
+                        reg.active.postMessage({
+                            base_url: "{% url 'tasks:index' %}",
+                            add_task_url: "{% url 'tasks:add' %}"
+                        });
+                    }
+                }).catch(error => console.error('Service worker ready state error:', error));
+            })
+            .catch(function(error) {
+                console.log('Service Worker registration failed:', error);
+            });
+        }
+    </script>
+    {% block scripts %}
+    <script src="{% static 'tasks/tasks.js' %}"></script>
+    {% endblock %}
+</body>
+</html>
