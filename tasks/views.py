@@ -1,14 +1,12 @@
-import os
-
 from django.shortcuts import render, get_object_or_404
 from django import forms
 from django.http import HttpResponseRedirect, JsonResponse, HttpResponseNotAllowed, HttpResponse
 from django.urls import reverse
 from django.views.decorators.http import require_GET
-
-from .models import Task
 from django.views.decorators.csrf import csrf_exempt
 import json
+
+from .models import Task, Status, Priority
 
 # Form class for adding a new task
 class NewTaskForm(forms.Form):
@@ -34,8 +32,22 @@ def add(request):
     if request.method == "POST":
         form = NewTaskForm(request.POST)
         if form.is_valid():
-            task_name = form.cleaned_data["task"]
-            Task.objects.create(name=task_name)  # Create a new Task object and save it in the database
+            task_title = form.cleaned_data["task"]
+            description = request.POST.get("description", "")
+            priority = request.POST.get("priority", Priority.LOW)
+            status = request.POST.get("status", Status.TODO)
+
+            user = request.user
+            if not user.is_authenticated:
+                return HttpResponseRedirect(reverse("login"))
+
+            Task.objects.create(
+                title=task_title,
+                description=description,
+                priority=int(priority),
+                status=int(status),
+                author=user
+            )
             return HttpResponseRedirect(reverse("tasks:index"))
         else:
             return render(request, "tasks/add.html", {
@@ -45,27 +57,55 @@ def add(request):
         "form": NewTaskForm()
     })
 
+
 # API View to Get a List of Tasks
 def get_tasks(request):
-    tasks = Task.objects.all().values("id", "name", "completed")  # Get all tasks from the database
-    return JsonResponse(list(tasks), safe=False)  # Return tasks as JSON
+    tasks = Task.objects.all().values("id", "title", "description", "priority", "status")
+    return JsonResponse(list(tasks), safe=False)
+
 
 # API View to Get a Specific Task
 def get_task(request, id):
-    task = get_object_or_404(Task, id=id)  # Fetch a specific task by ID or return a 404 if not found
-    return JsonResponse({"id": task.id, "name": task.name, "completed": task.completed})
+    task = get_object_or_404(Task, id=id)
+    return JsonResponse({
+        "id": task.id,
+        "title": task.title,
+        "description": task.description,
+        "status": task.status,
+        "priority": task.priority
+    })
+
 
 # API View to Create a New Task
-@csrf_exempt  # To allow POST requests without CSRF protection for the sake of API
+@csrf_exempt
 def create_task(request):
     if request.method == "POST":
-        data = json.loads(request.body)  # Parse incoming JSON data
-        task_name = data.get("task")
-        if task_name:
-            if Task.objects.get(name=task_name) is not None:
+        data = json.loads(request.body)
+        task_title = data.get("task") or data.get("title")
+
+        if task_title:
+            # Check if task already exists
+            if Task.objects.filter(title=task_title).exists():
                 return JsonResponse({"error": "Task already exists."}, status=400)
-            task = Task.objects.create(name=task_name)  # Create and save the new task in the database
-            return JsonResponse({"message": "Task added successfully", "task": {"id": task.id, "name": task.name}}, status=201)
+
+            task = Task.objects.create(
+                title=task_title,
+                description=data.get("description", ""),
+                priority=data.get("priority", Priority.LOW),
+                status=data.get("status", Status.TODO),
+                author=request.user if request.user.is_authenticated else None
+            )
+
+            return JsonResponse({
+                "message": "Task added successfully",
+                "task": {
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description,
+                    "priority": task.priority,
+                    "status": task.status
+                }
+            }, status=201)
         else:
             return JsonResponse({"error": "Task content not provided."}, status=400)
     return HttpResponseNotAllowed(["POST"])
@@ -74,23 +114,40 @@ def create_task(request):
 @csrf_exempt
 def update_task(request, id):
     if request.method in ["PUT", "PATCH"]:
-        task = get_object_or_404(Task, id=id)  # Fetch the task by ID or return a 404 if not found
+        task = get_object_or_404(Task, id=id)
         data = json.loads(request.body)
-        task_name = data.get("name", task.name)  # Default to existing name if not provided
-        completed = data.get("completed", task.completed)  # Default to existing completed status if not provided
-        # Update task fields
-        task.name = task_name
-        task.completed = completed
-        task.save()  # Save the updated task to the database
-        return JsonResponse({"message": "Task updated successfully", "task": {"id": task.id, "name": task.name, "completed": task.completed}})
+
+        # Update fields if provided
+        if "title" in data:
+            task.title = data["title"]
+        if "description" in data:
+            task.description = data["description"]
+        if "status" in data:
+            task.status = data["status"]
+        if "priority" in data:
+            task.priority = data["priority"]
+
+        task.save()
+
+        return JsonResponse({
+            "message": "Task updated successfully",
+            "task": {
+                "id": task.id,
+                "title": task.title,
+                "description": task.description,
+                "priority": task.priority,
+                "status": task.status
+            }
+        })
+
     return HttpResponseNotAllowed(["PUT", "PATCH"])
 
 # API View to Delete a Task
 @csrf_exempt
 def delete_task(request, id):
     if request.method == "DELETE":
-        task = get_object_or_404(Task, id=id)  # Fetch the task by ID or return a 404 if not found
-        task.delete()  # Delete the task from the database
+        task = get_object_or_404(Task, id=id)
+        task.delete()
         return JsonResponse({"message": "Task deleted successfully."})
     return HttpResponseNotAllowed(["DELETE"])
 

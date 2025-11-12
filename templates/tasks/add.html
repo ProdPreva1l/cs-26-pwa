@@ -6,8 +6,41 @@
     {% csrf_token %}
     <table>
         <tr>
-            <td> {{ form }} </td>
-            <td> <input type="submit" id="submit" disabled> </td>
+            <td><label for="task">Task Title:</label></td>
+            <td>{{ form.task }}</td>
+        </tr>
+        <tr>
+            <td><label for="description">Description:</label></td>
+            <td>
+                <textarea name="description" id="description" rows="3" cols="40" placeholder="Task description (optional)"></textarea>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="priority">Priority:</label></td>
+            <td>
+                <select name="priority" id="priority">
+                    <option value="0">Low</option>
+                    <option value="1" selected>Medium</option>
+                    <option value="2">High</option>
+                    <option value="3">Urgent</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="status">Status:</label></td>
+            <td>
+                <select name="status" id="status">
+                    <option value="0" selected>To Do</option>
+                    <option value="1">In Progress</option>
+                    <option value="2">In Review</option>
+                    <option value="3">Complete</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2">
+                <input type="submit" id="submit" value="Add Task" disabled>
+            </td>
         </tr>
     </table>
 </form>
@@ -15,11 +48,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
    document.querySelector("#task").onkeyup = () => {
-       if (document.querySelector("#task").value.length > 0) {
-           document.querySelector("#submit").disabled = false;
-       } else {
-           document.querySelector("#submit").disabled = true;
-       }
+       document.querySelector("#submit").disabled = document.querySelector("#task").value.length <= 0;
    }
 });
 </script>
